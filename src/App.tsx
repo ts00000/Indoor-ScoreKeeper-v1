@@ -18,6 +18,9 @@ export default function IndoorCricketScorekeeper() {
   const [showOut, setShowOut] = useState(false);
   const [lastBalls, setLastBalls] = useState([]);
 
+  // OVER DATA FOR GRAPHS
+  const [oversData, setOversData] = useState([]);
+
   // BATTERS
   const [battingCard, setBattingCard] = useState([]);
   const [battingHistory, setBattingHistory] = useState([]);
@@ -55,6 +58,10 @@ export default function IndoorCricketScorekeeper() {
 
   const overDisplay = `${Math.floor(balls / 6)}.${balls % 6}`;
 
+  // LIVE RUN RATE (1st innings)
+  const liveOvers = balls / 6;
+  const liveRunRate = liveOvers > 0 ? (score / liveOvers).toFixed(2) : '0.00';
+
   // FINISH MATCH (2nd innings)
   const finishGame = (finalScore, finalBalls) => {
     const second = {
@@ -89,7 +96,6 @@ export default function IndoorCricketScorekeeper() {
     setBalls(nextBall);
 
     if (nextBall % 6 === 0) {
-      switchStrike();
       setShowOverComplete(true);
       setShowNewBowlerModal(true);
       setCurrentBowler("");
@@ -125,6 +131,7 @@ export default function IndoorCricketScorekeeper() {
   };
 
   const dotBall = () => {
+    const currentOver = Math.floor(balls / 6);
     if (requireModal()) return;
     if (showNewBowlerModal || showNewBatterModal) return;
     if (!ensureBowler() || onStrikeIndex === null) return;
@@ -149,71 +156,84 @@ export default function IndoorCricketScorekeeper() {
 
     setLastBalls(prev => ['.', ...prev.slice(0, 11)]);
 
+    setOversData(prev => {
+      const copy = [...prev];
+      if (!copy[currentOver]) copy[currentOver] = { over: currentOver + 1, runs: 0, wicket: false };
+      return copy;
+    });
+
     
     addBall();
   };
 
 
   const exportPDF = () => {
-    // ChatGPT canvas & some embedded environments block direct window.print()
-    // Workaround: open printable content in a new window and trigger print there
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
+
+    const inningsBlock = (title, summary) => `
+      <h3>${title} – ${summary.teamName}</h3>
+      <p><strong>${summary.score}/${summary.wickets}</strong> (${Math.floor(summary.balls / 6)}.${summary.balls % 6} overs)</p>
+
+      <h4>Batting</h4>
+      <table>
+        <thead>
+          <tr><th class="left">Name</th><th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th></tr>
+        </thead>
+        <tbody>
+          ${summary.batting.map(b => `
+            <tr>
+              <td class="left">${b.name}${b.out ? '' : '*'}</td>
+              <td>${b.runs}</td>
+              <td>${b.balls}</td>
+              <td>${b.fours}</td>
+              <td>${b.sixes}</td>
+              <td>${b.balls ? ((b.runs / b.balls) * 100).toFixed(1) : '0.0'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+
+      <h4>Bowling</h4>
+      <table>
+        <thead>
+          <tr><th class="left">Name</th><th>O</th><th>R</th><th>W</th><th>ECON</th><th>WD</th></tr>
+        </thead>
+        <tbody>
+          ${Object.entries(summary.bowling).map(([name, s]) => `
+            <tr>
+              <td class="left">${name}</td>
+              <td>${Math.floor(s.balls / 6)}.${s.balls % 6}</td>
+              <td>${s.runs}</td>
+              <td>${s.wickets}</td>
+              <td>${s.balls ? (s.runs / (s.balls / 6)).toFixed(2) : '0.00'}</td>
+              <td>${s.wides}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      <hr />
+    `;
 
     printWindow.document.write(`
       <html>
         <head>
-          <title>Indoor Cricket Scorecard</title>
+          <title>Indoor Cricket – Match Summary</title>
           <style>
             body { font-family: Arial, sans-serif; padding: 24px; }
-            h2, h3 { margin-bottom: 8px; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+            h2, h3, h4 { margin: 12px 0 6px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
             th, td { border: 1px solid #ddd; padding: 6px; text-align: center; }
             th { background: #f4f4f4; }
             .left { text-align: left; }
           </style>
         </head>
         <body>
-          <h2>Score: ${score}/${wickets}</h2>
-          <p>Overs: ${overDisplay}</p>
+          <h2>Match Result</h2>
+          <h3>${matchResultText}</h3>
 
-          <h3>Batting</h3>
-          <table>
-            <thead>
-              <tr><th class="left">Name</th><th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th></tr>
-            </thead>
-            <tbody>
-              ${battingCard.map(b => `
-                <tr>
-                  <td class="left">${b.name}${b.out ? '' : '*'}</td>
-                  <td>${b.runs}</td>
-                  <td>${b.balls}</td>
-                  <td>${b.fours}</td>
-                  <td>${b.sixes}</td>
-                  <td>${b.balls ? ((b.runs / b.balls) * 100).toFixed(1) : '0.0'}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-
-          <h3>Bowling</h3>
-          <table>
-            <thead>
-              <tr><th class="left">Name</th><th>O</th><th>R</th><th>W</th><th>ECON</th><th>WD</th></tr>
-            </thead>
-            <tbody>
-              ${Object.entries(bowlingCard).map(([name, s]) => `
-                <tr>
-                  <td class="left">${name}</td>
-                  <td>${Math.floor(s.balls / 6)}.${s.balls % 6}</td>
-                  <td>${s.runs}</td>
-                  <td>${s.wickets}</td>
-                  <td>${s.balls ? (s.runs / (s.balls / 6)).toFixed(2) : '0.00'}</td>
-                  <td>${s.wides}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
+          ${firstInningsSummary ? inningsBlock('First Innings', firstInningsSummary) : ''}
+          ${secondInningsSummary ? inningsBlock('Second Innings', secondInningsSummary) : ''}
         </body>
       </html>
     `);
@@ -238,36 +258,48 @@ export default function IndoorCricketScorekeeper() {
   };
 
   const wideBall = () => {
+    const currentOver = Math.floor(balls / 6);
     if (requireModal()) return;
     if (showNewBowlerModal || showNewBatterModal) return;
     if (!ensureBowler()) return;
-    if (showNewBowlerModal || showNewBatterModal) return;
-    if (!ensureBowler()) return;
-    setHistory(h => [...h, snapshot()]);
 
+    setHistory(h => [...h, snapshot()]);
     setScore(s => s + 2);
 
     setBowlingCard(prev => {
       const copy = { ...prev };
       const bwl = copy[currentBowler];
       if (!bwl) return prev;
-      copy[currentBowler] = { ...bwl, balls: bwl.balls + 1, runs: bwl.runs + 2, wides: bwl.wides + 1 };
-      setLastBalls(prev => ['W', ...prev.slice(0, 11)]);
+      copy[currentBowler] = {
+        ...bwl,
+        balls: bwl.balls + 1,
+        runs: bwl.runs + 2,
+        wides: bwl.wides + 1
+      };
       return copy;
     });
 
-    
+    // correct wide marker
+    setLastBalls(prev => ['wd', ...prev.slice(0, 11)]);
+
+    setOversData(prev => {
+      const copy = [...prev];
+      if (!copy[currentOver]) copy[currentOver] = { over: currentOver + 1, runs: 0, wicket: false };
+      copy[currentOver].runs += 2;
+      return copy;
+    });
+
     addBall();
   };
 
   const outBall = () => {
+    const currentOver = Math.floor(balls / 6);
     if (requireModal()) return;
     if (showNewBowlerModal || showNewBatterModal) return;
     if (!ensureBowler() || onStrikeIndex === null) return;
 
     setHistory(h => [...h, snapshot()]);
 
-    // increment wicket ONCE
     setWickets(w => w + 1);
     setShowOut(true);
     setPendingOutIndex(onStrikeIndex);
@@ -287,11 +319,23 @@ export default function IndoorCricketScorekeeper() {
       const copy = { ...prev };
       const bwl = copy[currentBowler];
       if (!bwl) return prev;
-      copy[currentBowler] = { ...bwl, balls: bwl.balls + 1, wickets: bwl.wickets + 1 };
+      copy[currentBowler] = {
+        ...bwl,
+        balls: bwl.balls + 1,
+        wickets: bwl.wickets + 1
+      };
       return copy;
     });
 
+    // correct OUT marker
     setLastBalls(prev => ['W', ...prev.slice(0, 11)]);
+
+    setOversData(prev => {
+      const copy = [...prev];
+      if (!copy[currentOver]) copy[currentOver] = { over: currentOver + 1, runs: 0, wicket: true };
+      copy[currentOver].wicket = true;
+      return copy;
+    });
 
     addBall();
     setTimeout(() => setShowOut(false), 2000);
@@ -327,60 +371,75 @@ export default function IndoorCricketScorekeeper() {
   };
 
 
-  const addRuns = (runs, switchStr = false) => {
+  const addRuns = ({ scoreRuns, physicalRuns }) => {
+    const currentOver = Math.floor(balls / 6);
     if (requireModal()) return;
     if (showNewBowlerModal || showNewBatterModal) return;
     if (!ensureBowler() || onStrikeIndex === null) return;
 
-    const nextScore = score + runs;
+    const nextScore = score + scoreRuns;
     const nextBalls = balls + 1;
 
+    // win condition (2nd innings)
     if (innings === 2 && target !== null && nextScore >= target) {
       finishGame(nextScore, nextBalls);
       return;
     }
 
     setHistory(h => [...h, snapshot()]);
-    if (requireModal()) return;
-    if (showNewBowlerModal || showNewBatterModal) return;
-    if (!ensureBowler()) return;
-    if (showNewBowlerModal || showNewBatterModal) return;
-    if (!ensureBowler() || onStrikeIndex === null) return;
 
-    setHistory(h => [...h, snapshot()]);
+    setScore(s => s + scoreRuns);
+    setLastBalls(prev => [scoreRuns === 0 ? '.' : scoreRuns.toString(), ...prev.slice(0, 11)]);
 
-    setScore(s => s + runs);
-    setLastBalls(prev => [runs.toString(), ...prev.slice(0, 11)]);
+    setOversData(prev => {
+      const copy = [...prev];
+      if (!copy[currentOver]) copy[currentOver] = { over: currentOver + 1, runs: 0, wicket: false };
+      copy[currentOver].runs += scoreRuns;
+      return copy;
+    });
 
+    // batting update
     setBattingCard(prev => {
       const copy = [...prev];
       const b = copy[onStrikeIndex];
       if (!b) return prev;
       copy[onStrikeIndex] = {
         ...b,
-        runs: b.runs + runs,
+        runs: b.runs + scoreRuns,
         balls: b.balls + 1,
-        fours: runs === 4 ? b.fours + 1 : b.fours,
-        sixes: runs === 6 ? b.sixes + 1 : b.sixes
+        fours: scoreRuns === 4 ? b.fours + 1 : b.fours,
+        sixes: scoreRuns === 6 ? b.sixes + 1 : b.sixes
       };
       return copy;
     });
 
+    // bowling update
     setBowlingCard(prev => {
       const copy = { ...prev };
       const bwl = copy[currentBowler];
       if (!bwl) return prev;
-      copy[currentBowler] = { ...bwl, balls: bwl.balls + 1, runs: bwl.runs + runs };
+      copy[currentBowler] = {
+        ...bwl,
+        balls: bwl.balls + 1,
+        runs: bwl.runs + scoreRuns
+      };
       return copy;
     });
 
-    
+    // STRIKE LOGIC — only physical runs matter
+    if (physicalRuns === 1) {
+      switchStrike();
+    }
+
     addBall();
-    if (switchStr) switchStrike();
   };
 
   const endInnings = () => {
+    const oversBowled = balls / 6;
+    const runRate = oversBowled > 0 ? (score / oversBowled).toFixed(2) : '0.00';
     const summary = {
+      runRate,
+      oversData,
       teamName,
       score,
       wickets,
@@ -489,7 +548,42 @@ export default function IndoorCricketScorekeeper() {
                 </Button>
               </div>
 
-              <div className="font-semibold text-lg">
+              <div className="text-center mt-2">
+                <div className="text-2xl font-extrabold">{inningsSummary.teamName}</div>
+                <div className="text-xl font-bold">
+                  {inningsSummary.score}/{inningsSummary.wickets}
+                  <span className="text-base font-normal">
+                    {' '}({Math.floor(inningsSummary.balls / 6)}.{inningsSummary.balls % 6} overs)
+                  </span>
+                </div>
+                <div className="text-green-600 font-semibold mt-1">Target: {inningsSummary.score + 1}</div>
+              </div>
+
+              <div className="font-semibold text-lg">Run Rate: {inningsSummary.runRate}</div>
+
+              {/* OVER BY OVER GRAPH */}
+              <div>
+                <h3 className="font-semibold mb-2">Runs per Over</h3>
+                {(() => {
+                  const maxRuns = Math.max(...inningsSummary.oversData.map(o => o.runs), 1);
+                  return (
+                    <div className="flex items-end gap-2 h-40">
+                      {inningsSummary.oversData.map(o => (
+                        <div key={o.over} className="flex flex-col items-center flex-1">
+                          {o.wicket && <div className="text-red-500 text-xs mb-1">●</div>}
+                          <div
+                            className="w-6 bg-green-500 rounded"
+                            style={{ height: `${Math.max(10, (o.runs / maxRuns) * 100)}%` }}
+                          />
+                          <div className="text-xs mt-1">{o.over}</div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div className="font-semibold">
                 {inningsSummary.teamName} — {inningsSummary.score}/{inningsSummary.wickets} ({Math.floor(inningsSummary.balls / 6)}.{inningsSummary.balls % 6} overs)
               </div>
 
@@ -648,41 +742,58 @@ export default function IndoorCricketScorekeeper() {
       )}
 
       <Card>
-        <CardContent className="p-4 grid gap-1">
-          <div className="flex justify-between items-center">
-            {innings === 2 && target !== null && maxBalls !== null && (
-              <div className="text-xs text-gray-600">
-                Need {Math.max(0, target - score)} runs off {Math.max(0, maxBalls - balls)} balls
-              </div>
-            )}
-            {teamName && (
-              <div className="text-sm font-bold mb-1">{teamName}</div>
-            )}
-            <div className="text-3xl font-bold">{score}/{wickets} <span className="text-base font-normal">({overDisplay})</span></div>
+        <CardContent className="p-6 grid gap-4">
+          {/* HEADER */}
+          <div className="flex justify-between items-start">
+            <div className="text-sm font-semibold text-gray-500">First Innings</div>
+            <div className="text-center flex-1">
+              <div className="text-lg font-semibold text-gray-400">{teamName || 'Team A Name'}</div>
+              <div className="text-5xl font-extrabold leading-tight">{score}/{wickets}</div>
+              <div className="text-sm text-gray-400">({overDisplay} Overs)</div>
+            </div>
             <div className="text-right text-sm">
               {onStrikeIndex !== null && battingCard[onStrikeIndex] && (
-                <div className="font-semibold">{battingCard[onStrikeIndex].name}* {battingCard[onStrikeIndex].runs}({battingCard[onStrikeIndex].balls})</div>
+                <div className="font-semibold">
+                  {battingCard[onStrikeIndex].name}* – {battingCard[onStrikeIndex].runs} ({battingCard[onStrikeIndex].balls})
+                </div>
               )}
               {nonStrikeIndex !== null && battingCard[nonStrikeIndex] && (
-                <div>{battingCard[nonStrikeIndex].name} {battingCard[nonStrikeIndex].runs}({battingCard[nonStrikeIndex].balls})</div>
+                <div>
+                  {battingCard[nonStrikeIndex].name} – {battingCard[nonStrikeIndex].runs} ({battingCard[nonStrikeIndex].balls})
+                </div>
               )}
-              <Button
-                onClick={switchStrike}
-                className="mt-1 px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300"
-              >
-                Switch strike
-              </Button>
             </div>
           </div>
-          <div className="mt-2 flex gap-2 overflow-hidden">
+
+          {/* META */}
+          <div className="flex justify-between text-sm text-gray-600">
+            <div>
+              <div>Current RR: {liveRunRate}</div>
+              <div>Balls remaining this over: {6 - (balls % 6)}</div>
+            </div>
+            {innings === 2 && target !== null && maxBalls !== null && (
+              <div className="text-right">
+                Need {Math.max(0, target - score)} off {Math.max(0, maxBalls - balls)} balls
+              </div>
+            )}
+          </div>
+
+          {/* LAST BALLS */}
+          <div className="flex gap-2 flex-wrap">
             {lastBalls.map((b, i) => (
-              <div key={i} className={`w-8 h-8 flex items-center justify-center rounded transition-opacity ${i === lastBalls.length - 1 ? 'opacity-40' : 'opacity-100'} ${b === 'W' ? 'bg-red-500 text-white' : b === '6' ? 'bg-purple-500 text-white' : b === '4' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>
+              <div
+                key={i}
+                className={`w-10 h-10 flex items-center justify-center rounded-md text-sm font-bold
+                  ${b === 'W' ? 'bg-red-500 text-white' :
+                    b === 'wd' ? 'bg-gray-300 text-gray-800' :
+                    b === '6' ? 'bg-green-500 text-white' :
+                    b === '4' ? 'bg-green-500 text-white' :
+                    'bg-gray-200'}`}
+              >
                 {b}
               </div>
             ))}
           </div>
-          {showOut && <div className="text-red-600 font-semibold">OUT</div>}
-          <div className="text-sm text-gray-600">Balls remaining this over: {6 - (balls % 6)}</div>
         </CardContent>
       </Card>
 
@@ -723,7 +834,10 @@ export default function IndoorCricketScorekeeper() {
             <CardContent className="p-4 grid gap-3">
               <h3 className="font-bold text-lg text-green-600">OVER COMPLETE</h3>
               <Input placeholder="New Bowler" value={currentBowler} onChange={e => setCurrentBowler(e.target.value)} />
-              <Button onClick={() => setShowNewBowlerModal(false)}>Confirm Bowler</Button>
+              <Button onClick={() => {
+                switchStrike();
+                setShowNewBowlerModal(false);
+              }}>Confirm Bowler</Button>
               <Button variant="outline" onClick={() => setShowNewBowlerModal(false)}>Close</Button>
             </CardContent>
           </Card>
@@ -758,10 +872,10 @@ export default function IndoorCricketScorekeeper() {
 
           {/* RUNS */}
           <div className="grid grid-cols-4 gap-4">
-            <Button onClick={() => addRuns(1, true)} className="h-20 text-3xl font-bold bg-green-400 text-black hover:bg-green-400">+1</Button>
-            <Button onClick={() => addRuns(2, true)} className="h-20 text-3xl font-bold bg-green-400 text-black hover:bg-green-400">+2</Button>
-            <Button onClick={() => addRuns(4)} className="h-20 text-3xl font-bold bg-green-400 text-black hover:bg-green-400 ">+4</Button>
-            <Button onClick={() => addRuns(6)} className="h-20 text-3xl font-bold bg-green-400 text-black hover:bg-green-400">+6</Button>
+            <Button onClick={() => addRuns({ scoreRuns: 1, physicalRuns: 1 })} className="h-20 text-3xl font-bold bg-green-400 text-black hover:bg-green-400">+1</Button>
+            <Button onClick={() => addRuns({ scoreRuns: 2, physicalRuns: 1 })} className="h-20 text-3xl font-bold bg-green-400 text-black hover:bg-green-400">+2</Button>
+            <Button onClick={() => addRuns({ scoreRuns: 4, physicalRuns: 0 })} className="h-20 text-3xl font-bold bg-green-400 text-black hover:bg-green-400 ">+4</Button>
+            <Button onClick={() => addRuns({ scoreRuns: 6, physicalRuns: 0 })} className="h-20 text-3xl font-bold bg-green-400 text-black hover:bg-green-400">+6</Button>
           </div>
 
           {/* WIDE & OUT */}
