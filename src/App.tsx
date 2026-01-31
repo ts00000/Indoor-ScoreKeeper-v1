@@ -745,7 +745,7 @@ export default function IndoorCricketScorekeeper() {
         <CardContent className="p-6 grid gap-4">
           {/* HEADER */}
           <div className="flex justify-between items-start">
-            <div className="text-sm font-semibold text-gray-500">First Innings</div>
+            <div className="text-sm font-semibold text-gray-500"> Innings</div>
             <div className="text-center flex-1">
               <div className="text-lg font-semibold text-gray-400">{teamName || 'Team A Name'}</div>
               <div className="text-5xl font-extrabold leading-tight">{score}/{wickets}</div>
